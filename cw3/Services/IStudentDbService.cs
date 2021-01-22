@@ -11,5 +11,6 @@ namespace cw3.Services
     {
         EnrollStudentResponse EnrollStudent(EnrollStudentRequest request);
         PromoteStudentsResponse PromoteStudents(PromoteStudentsRequest request);
+        Boolean CheckIndexNumber(string index);
     }
 }

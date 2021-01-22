@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace cw3.Controllers
 {
-    /*
+
     [ApiController]
     [Route("api/students")]
     public class StudentsController : ControllerBase
@@ -23,17 +23,18 @@ namespace cw3.Controllers
             using (SqlCommand com = new SqlCommand())
             {
                 com.Connection = con;
-                com.CommandText = "SELECT FirstName, LastName, BirthDate, Enrollment.Semester, Studies.Name as Studies FROM Student, Enrollment, Studies WHERE Student.IdEnrollment = Enrollment.IdEnrollment AND Enrollment.IdStudy = Studies.IdStudy";
+                com.CommandText = "SELECT IndexNumber, FirstName, LastName, BirthDate, Enrollment.Semester, Studies.Name as Studies FROM Student, Enrollment, Studies WHERE Student.IdEnrollment = Enrollment.IdEnrollment AND Enrollment.IdStudy = Studies.IdStudy";
 
                 con.Open();
                 SqlDataReader dr = com.ExecuteReader();
-                while(dr.Read())
+                while (dr.Read())
                 {
                     var st = new Student();
+                    st.IndexNumber = dr["IndexNumber"].ToString();
                     st.FirstName = dr["FirstName"].ToString();
                     st.LastName = dr["LastName"].ToString();
                     st.BirthDate = dr["BirthDate"].ToString();
-                    st.Semester = dr["Semester"].ToString();
+                    st.Semester = (int)dr["Semester"];
                     st.Studies = dr["Studies"].ToString();
                     list.Add(st);
                 }
@@ -41,7 +42,7 @@ namespace cw3.Controllers
 
             return Ok(list);
         }
-        
+        /*
         [HttpGet("{indexNumber}")]
         public IActionResult GetStudent(string indexNumber)
         {
@@ -71,4 +72,5 @@ namespace cw3.Controllers
     
     }
     */
-}
+    }
+    }

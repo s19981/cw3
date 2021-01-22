@@ -114,8 +114,8 @@ namespace cw3.Services
                     throw new EnrollmentException(exc.Message);
                 }
                 return response;
-                }
             }
+        }
 
         public PromoteStudentsResponse PromoteStudents(PromoteStudentsRequest request)
         {
@@ -143,6 +143,30 @@ namespace cw3.Services
             }
 
             return response;
+        }
+
+        public Boolean CheckIndexNumber(string index)
+        {
+            using (SqlConnection con = new SqlConnection(ConString))
+            using (SqlCommand com = new SqlCommand())
+            {
+                com.Connection = con;
+                con.Open();
+                Boolean response = false;
+
+                com.CommandText = "SELECT IndexNumber FROM Student WHERE IndexNumber=@index";
+                com.Parameters.AddWithValue("index", index);
+
+                var dr = com.ExecuteReader();
+
+                if (dr.HasRows)
+                {
+                    response = true;
+                }
+
+                dr.Close();
+                return response;
+            }
         }
     }
 
