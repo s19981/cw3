@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 
 namespace cw3.Controllers
 {
+    /*
     [ApiController]
     [Route("api/students")]
     public class StudentsController : ControllerBase
@@ -67,5 +68,7 @@ namespace cw3.Controllers
             }
             return Ok(list);
         }
+    
     }
+    */
 }
