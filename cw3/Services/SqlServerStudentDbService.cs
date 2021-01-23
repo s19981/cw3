@@ -1,12 +1,14 @@
 ﻿using cw3.DTOs.Requests;
 using cw3.DTOs.Responses;
 using cw3.Models;
+using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace cw3.Services
@@ -167,6 +169,101 @@ namespace cw3.Services
                 dr.Close();
                 return response;
             }
+        }
+
+        public AuthResponse CheckCredentials(LoginRequest request)
+        {
+            using (SqlConnection con = new SqlConnection(ConString))
+            using (SqlCommand com = new SqlCommand())
+            {
+                com.Connection = con;
+                con.Open();
+                AuthResponse response = new AuthResponse();
+                response.Authenticated = false;
+
+                com.CommandText = "SELECT * FROM Student WHERE IndexNumber=@index";
+                com.Parameters.AddWithValue("index", request.IndexNumber);
+
+                var dr = com.ExecuteReader();
+
+                if (dr.Read())
+                {
+                    string salt = dr["Salt"].ToString();
+                    string password = dr["Password"].ToString();
+
+                    if (Validate(request.Password, salt, password))
+                    {
+
+                        response.Authenticated = true;
+                        response.IndexNumber = dr["IndexNumber"].ToString();
+                        response.FirstName = dr["FirstName"].ToString();
+                        response.LastName = dr["LastName"].ToString();
+                        response.RefreshToken = Guid.NewGuid().ToString();
+
+                        dr.Close();
+                        com.CommandText = "UPDATE Student SET RefreshToken=@refreshToken WHERE IndexNumber=@indexNumber";
+                        com.Parameters.AddWithValue("indexNumber", response.IndexNumber);
+                        com.Parameters.AddWithValue("refreshToken", response.RefreshToken);
+                        dr = com.ExecuteReader();
+                    }
+                }
+
+                dr.Close();
+                return response;
+            }
+        }
+
+        public AuthResponse CheckRefreshToken(string refToken)
+        {
+            using (SqlConnection con = new SqlConnection(ConString))
+            using (SqlCommand com = new SqlCommand())
+            {
+                com.Connection = con;
+                con.Open();
+                AuthResponse response = new AuthResponse();
+                response.Authenticated = false;
+
+                com.CommandText = "SELECT * FROM Student WHERE RefreshToken=@token";
+                com.Parameters.AddWithValue("token", refToken);
+
+                var dr = com.ExecuteReader();
+
+                if (dr.Read())
+                {
+                    response.Authenticated = true;
+                    response.IndexNumber = dr["IndexNumber"].ToString();
+                    response.FirstName = dr["FirstName"].ToString();
+                    response.LastName = dr["LastName"].ToString();
+                    response.RefreshToken = Guid.NewGuid().ToString();
+
+                    dr.Close();
+                    com.CommandText = "UPDATE Student SET RefreshToken=@refreshToken WHERE IndexNumber=@indexNumber";
+                    com.Parameters.AddWithValue("indexNumber", response.IndexNumber);
+                    com.Parameters.AddWithValue("refreshToken", response.RefreshToken);
+                    dr = com.ExecuteReader();
+                }
+
+                dr.Close();
+                return response;
+            }
+        }
+
+          
+        public static bool Validate(string value, string salt, string hash)
+        {
+            return Create(value, salt) == hash;
+        }
+
+        public static string Create(string value, string salt)
+        {
+            var valueBytes = KeyDerivation.Pbkdf2(
+                    password: value,
+                    salt: Encoding.UTF8.GetBytes(salt),
+                    prf: KeyDerivationPrf.HMACSHA512,
+                    iterationCount: 10000,
+                    numBytesRequested: 256 / 8);
+
+            return Convert.ToBase64String(valueBytes);
         }
     }
 

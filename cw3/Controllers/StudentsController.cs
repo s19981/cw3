@@ -1,9 +1,19 @@
-﻿using cw3.Models;
+﻿using cw3.DTOs.Requests;
+using cw3.Models;
+using cw3.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace cw3.Controllers
@@ -13,9 +23,17 @@ namespace cw3.Controllers
     [Route("api/students")]
     public class StudentsController : ControllerBase
     {
+        private IStudentDbService _service;
+        public IConfiguration Configuration { get; set; }
+        public StudentsController(IConfiguration configuration, IStudentDbService service)
+        {
+            Configuration = configuration;
+            _service = service;
+        }
         private const string ConString = "Data Source=db-mssql;Initial Catalog=s19981;Integrated Security=True";
 
         [HttpGet]
+        [Authorize(Roles = "employee")]
         public IActionResult GetStudents()
         {
             var list = new List<Student>();
@@ -42,35 +60,89 @@ namespace cw3.Controllers
 
             return Ok(list);
         }
-        /*
-        [HttpGet("{indexNumber}")]
-        public IActionResult GetStudent(string indexNumber)
-        {
-            var list = new List<Enrollment>();
-            using (SqlConnection con = new SqlConnection(ConString))
-            using (SqlCommand com = new SqlCommand())
-            {
-                com.Connection = con;
-                com.CommandText = "SELECT Enrollment.IdEnrollment, Enrollment.Semester, Enrollment.IdStudy, Enrollment.StartDate, Studies.Name as Studies FROM Enrollment, Student, Studies WHERE Enrollment.IdEnrollment = Student.IdEnrollment AND Studies.IdStudy = Enrollment.IdStudy AND Student.IndexNumber=@id";
-                com.Parameters.AddWithValue("id", indexNumber);
 
-                con.Open();
-                var dr = com.ExecuteReader();
-                while (dr.Read())
-                {
-                    var e = new Enrollment();
-                    e.IdEnrollment = dr["IdEnrollment"].ToString();
-                    e.Semester = dr["Semester"].ToString();
-                    e.IdStudy = dr["IdStudy"].ToString();
-                    e.StartDate = dr["StartDate"].ToString();
-                    e.Studies = dr["Studies"].ToString();
-                    list.Add(e);
-                }
+        [HttpPost]
+        public IActionResult Login(LoginRequest request)
+        {
+            var result = _service.CheckCredentials(request);
+
+            if (!result.Authenticated)
+            {
+                return Unauthorized();
             }
-            return Ok(list);
+
+            var claims = new[]
+            {
+                    new Claim(ClaimTypes.NameIdentifier, result.IndexNumber),
+                    new Claim(ClaimTypes.Name, result.FirstName),
+                    new Claim(ClaimTypes.Role, "employee")
+                };
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["SecretKey"]));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken
+            (
+                issuer: "Gakko",
+                audience: "Students",
+                claims: claims,
+                expires: DateTime.Now.AddMinutes(10),
+                signingCredentials: creds
+            );
+
+            return Ok(new
+            {
+                token = new JwtSecurityTokenHandler().WriteToken(token),
+                refreshToken = result.RefreshToken
+            });
         }
-    
+
+        [HttpPost("refresh-token/{refToken}")]
+        public IActionResult RefreshToken(string refToken)
+        {
+            var result = _service.CheckRefreshToken(refToken);
+
+            if (!result.Authenticated)
+            {
+                return Unauthorized();
+            }
+
+            var claims = new[]
+            {
+                    new Claim(ClaimTypes.NameIdentifier, result.IndexNumber),
+                    new Claim(ClaimTypes.Name, result.FirstName),
+                    new Claim(ClaimTypes.Role, "employee")
+                };
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["SecretKey"]));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken
+            (
+                issuer: "Gakko",
+                audience: "Students",
+                claims: claims,
+                expires: DateTime.Now.AddMinutes(10),
+                signingCredentials: creds
+            );
+
+            return Ok(new
+            {
+                token = new JwtSecurityTokenHandler().WriteToken(token),
+                refreshToken = result.RefreshToken
+            });
+        }
+
+        /*
+        private static string CreateSalt()
+        {
+            byte[] randomBytes = new byte[128 / 8];
+            using (var generator = RandomNumberGenerator.Create())
+            {
+                generator.GetBytes(randomBytes); 
+                return Convert.ToBase64String(randomBytes);
+            }
+        }
+        */
     }
-    */
-    }
-    }
+}
