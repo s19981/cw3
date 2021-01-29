@@ -23,126 +23,80 @@ namespace cw3.Controllers
     [Route("api/students")]
     public class StudentsController : ControllerBase
     {
-        private IStudentDbService _service;
         public IConfiguration Configuration { get; set; }
-        public StudentsController(IConfiguration configuration, IStudentDbService service)
+        public StudentsController(IConfiguration configuration)
         {
             Configuration = configuration;
-            _service = service;
         }
-        private const string ConString = "Data Source=db-mssql;Initial Catalog=s19981;Integrated Security=True";
 
         [HttpGet]
-        [Authorize(Roles = "employee")]
         public IActionResult GetStudents()
         {
-            var list = new List<Student>();
-            using (SqlConnection con = new SqlConnection(ConString))
-            using (SqlCommand com = new SqlCommand())
-            {
-                com.Connection = con;
-                com.CommandText = "SELECT IndexNumber, FirstName, LastName, BirthDate, Enrollment.Semester, Studies.Name as Studies FROM Student, Enrollment, Studies WHERE Student.IdEnrollment = Enrollment.IdEnrollment AND Enrollment.IdStudy = Studies.IdStudy";
-
-                con.Open();
-                SqlDataReader dr = com.ExecuteReader();
-                while (dr.Read())
-                {
-                    var st = new Student();
-                    st.IndexNumber = dr["IndexNumber"].ToString();
-                    st.FirstName = dr["FirstName"].ToString();
-                    st.LastName = dr["LastName"].ToString();
-                    st.BirthDate = dr["BirthDate"].ToString();
-                    st.Semester = (int)dr["Semester"];
-                    st.Studies = dr["Studies"].ToString();
-                    list.Add(st);
-                }
-            };
-
+            var db = new s19981Context();
+            var list = db.Students.ToList();
             return Ok(list);
         }
 
+        [HttpGet("{indexNumber}")]
+        public IActionResult GetStudent(string indexNumber)
+        {
+            var db = new s19981Context();
+            var student = db.Students.Where(student => student.IndexNumber == indexNumber).First();
+            return Ok(student);
+        }
+
+        [HttpPatch("{indexNumber}")]
+        public IActionResult UpdateStudent(string indexNumber, string firstName, string lastName)
+        {
+            var db = new s19981Context();
+            var student = new Student
+            {
+                IndexNumber = indexNumber,
+                FirstName = firstName,
+                LastName = lastName
+            };
+            db.Attach(student);
+            db.Entry(student).Property("FirstName").IsModified = true;
+            db.Entry(student).Property("LastName").IsModified = true;
+            db.SaveChanges();
+
+            return Ok(student);
+        }
+
         [HttpPost]
-        public IActionResult Login(LoginRequest request)
+        public IActionResult CreateStudent(string indexNumber, string firstName, string lastName, DateTime birthDate)
         {
-            var result = _service.CheckCredentials(request);
-
-            if (!result.Authenticated)
+            var db = new s19981Context();
+            var student = new Student
             {
-                return Unauthorized();
-            }
+                IndexNumber = indexNumber,
+                FirstName = firstName,
+                LastName = lastName,
+                BirthDate = DateTime.Parse(birthDate.ToString()),
+                IdEnrollment = 1
+            };
 
-            var claims = new[]
-            {
-                    new Claim(ClaimTypes.NameIdentifier, result.IndexNumber),
-                    new Claim(ClaimTypes.Name, result.FirstName),
-                    new Claim(ClaimTypes.Role, "employee")
-                };
+            db.Students.Add(student);
+            db.SaveChanges();
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["SecretKey"]));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            var token = new JwtSecurityToken
-            (
-                issuer: "Gakko",
-                audience: "Students",
-                claims: claims,
-                expires: DateTime.Now.AddMinutes(10),
-                signingCredentials: creds
-            );
-
-            return Ok(new
-            {
-                token = new JwtSecurityTokenHandler().WriteToken(token),
-                refreshToken = result.RefreshToken
-            });
+            return Ok(student);
         }
 
-        [HttpPost("refresh-token/{refToken}")]
-        public IActionResult RefreshToken(string refToken)
+        [HttpDelete("{indexNumber}")]
+        public IActionResult DeleteStudent(string indexNumber)
         {
-            var result = _service.CheckRefreshToken(refToken);
-
-            if (!result.Authenticated)
+            var db = new s19981Context();
+            var student = new Student
             {
-                return Unauthorized();
-            }
+                IndexNumber = indexNumber
+            };
 
-            var claims = new[]
-            {
-                    new Claim(ClaimTypes.NameIdentifier, result.IndexNumber),
-                    new Claim(ClaimTypes.Name, result.FirstName),
-                    new Claim(ClaimTypes.Role, "employee")
-                };
+            db.Attach(student);
+            db.Remove(student);
+            
+            db.SaveChanges();
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["SecretKey"]));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            var token = new JwtSecurityToken
-            (
-                issuer: "Gakko",
-                audience: "Students",
-                claims: claims,
-                expires: DateTime.Now.AddMinutes(10),
-                signingCredentials: creds
-            );
-
-            return Ok(new
-            {
-                token = new JwtSecurityTokenHandler().WriteToken(token),
-                refreshToken = result.RefreshToken
-            });
+            return Ok();
         }
-
-        /*
-        private static string CreateSalt()
-        {
-            byte[] randomBytes = new byte[128 / 8];
-            using (var generator = RandomNumberGenerator.Create())
-            {
-                generator.GetBytes(randomBytes); 
-                return Convert.ToBase64String(randomBytes);
-            }
-        }
-        */
     }
 }
